@@ -4,7 +4,7 @@ jdk:
 branches:
   only:
     - main
-before_install:
-  - chmod +x mvnw
+script:
+  - mvn clean install
 after_success:
   - bash <(curl -s https://codecov.io/bash)
