@@ -3,7 +3,7 @@ jdk:
   - openjdk8
 branches:
   only:
-    - master
+    - main
 before_install:
   - chmod +x mvnw
 after_success:
