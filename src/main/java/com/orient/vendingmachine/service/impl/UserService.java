@@ -10,9 +10,7 @@ import com.orient.vendingmachine.util.Util;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -67,24 +65,62 @@ public class UserService implements IUserService {
         return wallet;
     }
 
+    /**
+     * Select products from vending machine
+     *
+     * @param products
+     * @return
+     */
     @Override
     public List<Wallet> selectProducts(List<Product> products) {
         int totalPrice = products.stream().mapToInt(Product::getPrice).sum();
         int userWallet = userAddedCoins.stream().mapToInt(Wallet::getCount).sum();
-
+        List<Wallet> remainderCoins = null;
         if (totalPrice > userWallet) {
             throw new BadRequestException("Invalid request");
-        } else if(userWallet > totalPrice){
-
+        } else if (userWallet > totalPrice) {
+            remainderCoins = calculateChange(userWallet - totalPrice);
         }
         updateProductDetails(products);
         updateWallet();
-
         clearUserAddedCoins();
-        return null;
+        return remainderCoins;
     }
 
+    /**
+     * Method to find the remainder
+     *
+     * @param remainder
+     * @return
+     */
+    private List<Wallet> calculateChange(int remainder) {
+        List<Wallet> remainderCoins = new ArrayList<>();
+        Map<Integer, Integer> coinsMap = new TreeMap<>(Collections.reverseOrder());
+        walletRepository.findAll().forEach(c -> coinsMap.put(c.getDenomination(), c.getCount()));
 
+        for (Map.Entry<Integer, Integer> entry : coinsMap.entrySet()) {
+            if (remainder <= 0)
+                break;
+            int quotient = remainder / entry.getKey();
+            if (entry.getValue() >= quotient) {
+                remainder = remainder % entry.getKey();
+                remainderCoins.add(new Wallet(entry.getKey(), quotient));
+            } else {
+                int max = entry.getValue() * entry.getKey();
+                remainder = remainder - max;
+                remainderCoins.add(new Wallet(entry.getKey(), entry.getValue()));
+            }
+        }
+        if (remainder > 0)
+            throw new BadRequestException("Insufficient coins to withdraw");
+        return remainderCoins;
+    }
+
+    /**
+     * Update product details in DB
+     *
+     * @param products
+     */
     private void updateProductDetails(List<Product> products) {
         List<Integer> productIds = products.stream().map(Product::getProdId).collect(Collectors.toList());
         Iterable<Product> productsFromDb = productRepository.findAllById(productIds);
@@ -100,6 +136,9 @@ public class UserService implements IUserService {
         productRepository.saveAll(productsFromDb);
     }
 
+    /**
+     * Update wallet
+     */
     private void updateWallet() {
         List<Wallet> coinsInDb = new ArrayList<>();
         walletRepository.findAll().forEach(coinsInDb::add);
@@ -111,8 +150,6 @@ public class UserService implements IUserService {
         });
         walletRepository.saveAll(coinsInDb);
     }
-
-
     private void clearUserAddedCoins() {
         userAddedCoins = null;
     }
